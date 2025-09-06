@@ -309,7 +309,15 @@ ul { list-style: none; padding: 0; }
 
   <div id="customers-tab" class="tab hidden">
     <h2>Customer Manager</h2>
-    <input type="text" id="search" placeholder="Search by name or phone..." style="width: 250px;">
+    <div class="controls-bar" style="justify-content: flex-start; margin-bottom: 15px;">
+        <input type="text" id="search" placeholder="Search by name or phone..." style="width: 250px; margin-bottom: 0;">
+        <div style="margin-left: 20px; display: flex; align-items: center;">
+            <label for="customer-date-filter" style="margin-right: 8px; font-weight: 600;">Filter by Date:</label>
+            <input type="date" id="customer-date-filter" style="width: auto; margin-bottom: 0;">
+        </div>
+        <button id="clear-date-filter-btn" class="btn" style="padding: 8px 16px; font-size: 0.9rem; margin-left: 10px;">Clear Date</button>
+        <div id="daily-total-display" class="summary" style="margin-left: auto; font-size: 1.3rem; align-self: center; line-height: 18px;"></div>
+    </div>
     <table id="customer-table"><thead><tr><th>Date</th><th>Phone</th><th>Name</th><th>Services</th><th>Staff</th><th>Member</th><th>Total ₹</th><th>Paid ₹</th></tr></thead><tbody></tbody></table>
   </div>
 
@@ -585,17 +593,63 @@ function showTab(tab) {
 // ---------------- Customers ----------------
 const customerBody = document.querySelector("#customer-table tbody");
 const searchInput = document.getElementById("search");
-function renderCustomers(filter = "") {
+const customerDateFilter = document.getElementById("customer-date-filter");
+const clearDateFilterBtn = document.getElementById("clear-date-filter-btn");
+const dailyTotalDisplay = document.getElementById("daily-total-display");
+
+function renderCustomers(textFilter = "", dateFilter = "") {
   customerBody.innerHTML = "";
   const sortedEntries = [...entries].sort((a, b) => parseDate(b.date) - parseDate(a.date));
-  const filtered = sortedEntries.filter(e => (e.name || "").toLowerCase().includes(filter.toLowerCase()) || (e.phone || "").toLowerCase().includes(filter.toLowerCase()));
+
+  let filtered = sortedEntries;
+
+  // Apply text filter
+  if (textFilter) {
+    filtered = filtered.filter(e => 
+        (e.name || "").toLowerCase().includes(textFilter.toLowerCase()) || 
+        (e.phone || "").toLowerCase().includes(textFilter.toLowerCase())
+    );
+  }
+
+  // Apply date filter
+  if (dateFilter) {
+    filtered = filtered.filter(e => {
+      if (!e.date) return false;
+      // Convert "DD-MM-YYYY" from data to "YYYY-MM-DD" to match date picker value
+      const entryDate = `${e.date.slice(6,10)}-${e.date.slice(3,5)}-${e.date.slice(0,2)}`;
+      return entryDate === dateFilter;
+    });
+  }
+
+  // Calculate and display the total if a date is selected
+  if (dateFilter) {
+    const dailyTotal = filtered.reduce((sum, entry) => sum + (Number(entry.paid) || 0), 0);
+    dailyTotalDisplay.innerHTML = `Total for Day: <strong>₹${dailyTotal.toLocaleString('en-IN')}</strong>`;
+  } else {
+    dailyTotalDisplay.innerHTML = ""; // Clear the total if no date is filtered
+  }
+
+  // Populate the table
   filtered.forEach(e => {
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${e.date}</td><td>${e.phone}</td><td>${e.name}</td><td>${e.servicesText || ""}</td><td>${e.staff || ""}</td><td>${e.member || "Normal"}</td><td>₹${e.total || 0}</td><td>₹${e.paid || 0}</td>`;
     customerBody.appendChild(tr);
   });
 }
-searchInput.addEventListener("input", (e) => renderCustomers(e.target.value));
+
+function applyCustomerFilters() {
+    const textFilter = searchInput.value;
+    const dateFilter = customerDateFilter.value;
+    renderCustomers(textFilter, dateFilter);
+}
+
+searchInput.addEventListener("input", applyCustomerFilters);
+customerDateFilter.addEventListener("change", applyCustomerFilters);
+clearDateFilterBtn.addEventListener("click", () => {
+    customerDateFilter.value = ""; // Clear the date input
+    applyCustomerFilters(); // Re-render with the cleared date filter
+});
+
 
 // ---------------- VIPs Tab ----------------
 const oneYearAgo = new Date();
@@ -1606,12 +1660,17 @@ async function initializeApp() {
         renderStaffTab();
         
         // Hide loading overlay
-        document.getElementById('loading').classList.add('hidden');
+        const loadingOverlay = document.getElementById('loading');
+        if (loadingOverlay) {
+            loadingOverlay.classList.add('hidden');
+        }
 
     } catch (error) {
         console.error("Application initialization failed.", error);
     }
 }
+
+// Add a simple loading indicator in case the script takes time to load
 
 document.addEventListener('DOMContentLoaded', initializeApp);
 
