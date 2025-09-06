@@ -3,8 +3,44 @@
 <head>
   <meta charset="UTF-8">
   <title>Salon Data Manager</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <!-- Firebase SDKs -->
+  <script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+    import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+
+    // Your web app's Firebase configuration
+    const firebaseConfig = {
+        apiKey: "AIzaSyBJKkylpqjVAjBaPtU7zMHDoiKtD4TeXLA",
+        authDomain: "salondata-54efb.firebaseapp.com",
+        projectId: "salondata-54efb",
+        storageBucket: "salondata-54efb.firebasestorage.app",
+        messagingSenderId: "539974624360",
+        appId: "1:539974624360:web:0228d0eaf266ae2e6547dd",
+        measurementId: "G-8HQBF71HZJ"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // Make functions available globally on the window object
+    window.firebase = {
+      auth,
+      db,
+      onAuthStateChanged,
+      createUserWithEmailAndPassword,
+      signInWithEmailAndPassword,
+      signOut,
+      doc,
+      getDoc,
+      setDoc
+    };
+  </script>
 
   <style>
     /* ===== Global Styles ===== */
@@ -36,10 +72,15 @@ body {
   color: var(--text);
 }
 
+.main-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;}
 h1 { margin-bottom: 10px; font-size: 26px; font-weight: 700; color: #2c3e50; }
 h2 { margin-top: 20px; font-size: 1.5rem; font-weight: 600; color: #34495e; }
 h3 { font-size: 18px; margin: 25px 0 10px 0; color: #34495e; border-bottom: 2px solid var(--accent); padding-bottom: 5px; }
 h4 { font-size: 16px; margin: 20px 0 8px 0; color: #34495e; }
+
+/* ===== Auth Section ===== */
+.auth-section { display: flex; align-items: center; gap: 10px; }
+.auth-section #auth-status { font-size: 0.9em; color: #64748b; }
 
 /* ===== Main Navigation ===== */
 .nav { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
@@ -54,7 +95,7 @@ h4 { font-size: 16px; margin: 20px 0 8px 0; color: #34495e; }
 .btn.export-btn:hover { background: #059669; }
 .btn.danger-btn { background: var(--danger); font-size: 0.8em; padding: 4px 10px; }
 .btn.danger-btn:hover { background: #b91c1c; }
-
+.btn-small { padding: 6px 14px; font-size: 0.9rem; }
 
 /* ===== NEW Sub-Tab Navigation ===== */
 .sub-nav {
@@ -95,36 +136,20 @@ h4 { font-size: 16px; margin: 20px 0 8px 0; color: #34495e; }
 
 
 /* ===== Tables ===== */
-.table-wrapper {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch; /* Smoother scrolling on iOS */
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    margin-top: 10px;
-}
-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: var(--card);
-    min-width: 600px; /* Force scroll on smaller screens */
-}
+table { width: 100%; border-collapse: collapse; margin-top: 10px; background: var(--card); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
 th, td { padding: 12px 15px; text-align: left; font-size: 1rem; }
 th { background: #f1f5f9; font-weight: 600; color: #2c3e50; font-size: 15px; text-transform: uppercase; }
 tr:nth-child(even) td { background: #fafafa; }
 tr.clickable-row {
     cursor: pointer;
 }
-/* Add a transition to the cells for a smooth effect */
 tr.clickable-row td {
     transition: background-color 0.25s ease-in-out;
-    position: relative; /* Required for the pseudo-element */
+    position: relative; 
 }
-
 tr.clickable-row:hover td {
     background-color: #eff6ff;
 }
-
-/* Add a visual indicator on the left of the row on hover */
 tr.clickable-row:hover td:first-child::before {
     content: '';
     position: absolute;
@@ -137,12 +162,16 @@ tr.clickable-row:hover td:first-child::before {
 
 
 /* ===== Inputs ===== */
-input[type="text"], input[type="date"], input[type="month"], input[type="number"] {
+input[type="text"], input[type="date"], input[type="month"], input[type="number"], input[type="email"], input[type="password"] {
   margin-bottom: 10px; padding: 8px 10px; width: 100%; border: 1px solid #ccc;
   box-sizing: border-box;
   border-radius: var(--radius); outline: none; transition: border 0.3s; font-family: inherit;
 }
-input[type="text"]:focus, input[type="date"]:focus, input[type="month"]:focus, input[type="number"]:focus {
+input:disabled {
+    background-color: #e9ecef;
+    cursor: not-allowed;
+}
+input[type="text"]:focus, input[type="date"]:focus, input[type="month"]:focus, input[type="number"]:focus, input[type="email"]:focus, input[type="password"]:focus {
   border-color: var(--accent); box-shadow: 0 0 0 2px rgba(59,130,246,0.25);
 }
 .header-input {
@@ -243,7 +272,7 @@ input[type="text"]:focus, input[type="date"]:focus, input[type="month"]:focus, i
     width: auto;
 }
 
-/* ===== Customer Details Modal ===== */
+/* ===== Customer Details Modal & Login Modal ===== */
 .modal-overlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     background: rgba(0,0,0,0.6);
@@ -252,11 +281,17 @@ input[type="text"]:focus, input[type="date"]:focus, input[type="month"]:focus, i
 }
 .modal-content {
     background: var(--bg); color: var(--text); padding: 25px;
-    border-radius: var(--radius); width: 90%; max-width: 900px;
+    border-radius: var(--radius); width: 90%;
     max-height: 90vh; overflow-y: auto;
     box-shadow: 0 10px 30px rgba(0,0,0,0.2);
     position: relative;
 }
+#customer-details-modal .modal-content { max-width: 900px; }
+#login-modal .modal-content { max-width: 400px; }
+#login-modal h3 { text-align: center; }
+#login-form { display: flex; flex-direction: column; gap: 15px; }
+#login-error { color: var(--danger); text-align: center; font-size: 0.9em; }
+
 .modal-close {
     position: absolute; top: 10px; right: 15px;
     background: none; border: none; font-size: 2rem;
@@ -291,86 +326,19 @@ ul { list-style: none; padding: 0; }
     display: flex; justify-content: center; align-items: center;
     z-index: 9999; font-size: 1.5em; color: var(--text);
 }
-
-
-/* ===== Responsive Styles ===== */
-@media screen and (max-width: 768px) {
-    body {
-        padding: 10px;
-        font-size: 15px;
-    }
-    h1 { font-size: 22px; }
-    h2 { font-size: 20px; }
-    h3 { font-size: 17px; }
-
-    .nav { justify-content: flex-start; }
-    .btn { padding: 8px 16px; font-size: 0.9rem; }
-    .sub-nav { gap: 15px; }
-    .sub-nav .btn { font-size: 0.9rem; padding: 8px 2px; }
-
-    .profiles-layout {
-        grid-template-columns: 1fr;
-        gap: 15px;
-    }
-    .profile-list, .profile-details {
-        height: auto;
-        max-height: 40vh; /* Use viewport height for better scaling */
-    }
-    .controls-bar {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    .controls-bar input, .controls-bar div {
-        width: 100%;
-        margin: 0 0 10px 0 !important;
-    }
-    #daily-total-display {
-        text-align: right;
-        padding: 5px 0;
-        width: 100%;
-    }
-
-    .staff-salary-controls, #global-salary-settings {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 8px;
-        padding: 10px;
-    }
-    .staff-salary-controls input, #global-salary-settings input {
-        width: 100%;
-    }
-    .th-with-input {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 5px;
-    }
-    .header-input {
-        width: 100% !important;
-        margin: 0;
-    }
-
-    .modal-content {
-        width: 95%;
-        padding: 20px 15px;
-        max-height: 85vh;
-    }
-    .modal-summary {
-        gap: 10px;
-    }
-
-    th, td {
-        padding: 10px 12px;
-        font-size: 0.85rem;
-        white-space: nowrap; /* Prevent text wrapping inside cells */
-    }
-
-}
   </style>
 
 </head>
 <body>
 
-<h1>Salon Data Manager</h1>
+<div class="main-header">
+    <h1>Salon Data Manager</h1>
+    <div class="auth-section">
+        <span id="auth-status">Public View</span>
+        <button id="login-btn" class="btn btn-small" onclick="toggleLoginModal(true)">Login</button>
+        <button id="logout-btn" class="btn btn-small danger-btn hidden" onclick="handleLogout()">Logout</button>
+    </div>
+</div>
 
   <div class="nav">
     <button class="btn active" onclick="showTab('staff')">Staff</button>
@@ -384,9 +352,9 @@ ul { list-style: none; padding: 0; }
       <h2>Staff Data</h2>
        <div id="global-salary-settings">
             <label>Global Incentive per OT (₹):</label>
-            <input type="number" id="global-ot-rate">
+            <input type="number" id="global-ot-rate" style="width: 100px;" disabled>
             <label>Global Membership Incentive (₹):</label>
-            <input type="number" id="global-membership-rate">
+            <input type="number" id="global-membership-rate" style="width: 100px;" disabled>
         </div>
       <div id="staff-sub-nav" class="sub-nav">
           </div>
@@ -396,18 +364,16 @@ ul { list-style: none; padding: 0; }
 
   <div id="customers-tab" class="tab hidden">
     <h2>Customer Manager</h2>
-    <div class="controls-bar">
-        <input type="text" id="search" placeholder="Search by name or phone...">
-        <div style="display: flex; align-items: center;">
+    <div class="controls-bar" style="justify-content: flex-start; margin-bottom: 15px;">
+        <input type="text" id="search" placeholder="Search by name or phone..." style="width: 250px; margin-bottom: 0;">
+        <div style="margin-left: 20px; display: flex; align-items: center;">
             <label for="customer-date-filter" style="margin-right: 8px; font-weight: 600;">Filter by Date:</label>
-            <input type="date" id="customer-date-filter" style="margin-bottom: 0;">
+            <input type="date" id="customer-date-filter" style="width: auto; margin-bottom: 0;">
         </div>
-        <button id="clear-date-filter-btn" class="btn" style="padding: 8px 16px; font-size: 0.9rem;">Clear Date</button>
-        <div id="daily-total-display" class="summary" style="font-size: 1.3rem; align-self: center; line-height: 18px;"></div>
+        <button id="clear-date-filter-btn" class="btn" style="padding: 8px 16px; font-size: 0.9rem; margin-left: 10px;">Clear Date</button>
+        <div id="daily-total-display" class="summary" style="margin-left: auto; font-size: 1.3rem; align-self: center; line-height: 18px;"></div>
     </div>
-    <div class="table-wrapper">
-        <table id="customer-table"><thead><tr><th>Date</th><th>Phone</th><th>Name</th><th>Services</th><th>Staff</th><th>Member</th><th>Total ₹</th><th>Paid ₹</th></tr></thead><tbody></tbody></table>
-    </div>
+    <table id="customer-table"><thead><tr><th>Date</th><th>Phone</th><th>Name</th><th>Services</th><th>Staff</th><th>Member</th><th>Total ₹</th><th>Paid ₹</th></tr></thead><tbody></tbody></table>
   </div>
 
   <div id="vips-tab" class="tab hidden">
@@ -417,16 +383,12 @@ ul { list-style: none; padding: 0; }
         <button class="btn" id="expired-vips-btn" onclick="showVipsSubTab('expired')">Expired VIPs</button>
     </div>
     <div id="active-vips-content">
-      <input type="text" id="vip-search" placeholder="Search active VIPs..."><div id="vip-count" class="summary"></div>
-      <div class="table-wrapper">
-          <table id="vip-table"><thead><tr><th>Phone</th><th>Name</th><th>Join Date</th><th>Staff</th></tr></thead><tbody></tbody></table>
-      </div>
+      <input type="text" id="vip-search" placeholder="Search active VIPs..." style="width: 250px;"><div id="vip-count" class="summary"></div>
+      <table id="vip-table"><thead><tr><th>Phone</th><th>Name</th><th>Join Date</th><th>Staff</th></tr></thead><tbody></tbody></table>
     </div>
     <div id="expired-vips-content" class="hidden">
-      <input type="text" id="expired-vip-search" placeholder="Search expired VIPs..."><div id="expired-vip-count" class="summary"></div>
-      <div class="table-wrapper">
-          <table id="expired-vip-table"><thead><tr><th>Phone</th><th>Name</th><th>Join Date</th><th>Expired On</th></tr></thead><tbody></tbody></table>
-      </div>
+      <input type="text" id="expired-vip-search" placeholder="Search expired VIPs..." style="width: 250px;"><div id="expired-vip-count" class="summary"></div>
+      <table id="expired-vip-table"><thead><tr><th>Phone</th><th>Name</th><th>Join Date</th><th>Expired On</th></tr></thead><tbody></tbody></table>
     </div>
   </div>
 
@@ -440,34 +402,28 @@ ul { list-style: none; padding: 0; }
     </div>
     <div id="monthly-report-content">
         <div class="controls-bar">
-            <div><label for="report-month"><b>Select Month:</b></label> <input type="month" id="report-month"></div>
+            <div><label for="report-month"><b>Select Month:</b></label> <input type="month" id="report-month" style="width: 250px;"></div>
             <button class="btn export-btn" id="export-contacts-btn">Export Contacts</button>
         </div>
         <div id="monthly-report-dashboard"></div>
     </div>
     <div id="frequent-customers-report-content" class="hidden">
         <div id="frequent-customers-summary" class="report-summary"></div>
-        <input type="text" id="frequent-customers-search" placeholder="Search by name or phone...">
-        <div class="table-wrapper">
-            <table id="frequent-customers-table"><thead><tr><th>Rank</th><th>Name</th><th>Phone</th><th>Total Visits</th><th>Avg Spend</th><th>Last Visit Date</th></tr></thead><tbody></tbody></table>
-        </div>
+        <input type="text" id="frequent-customers-search" placeholder="Search by name or phone..." style="width: 250px;">
+        <table id="frequent-customers-table"><thead><tr><th>Rank</th><th>Name</th><th>Phone</th><th>Total Visits</th><th>Avg Spend</th><th>Last Visit Date</th></tr></thead><tbody></tbody></table>
     </div>
      <div id="expected-customers-report-content" class="hidden">
          <div id="expected-customers-summary" class="report-summary"></div>
-         <input type="text" id="expected-customers-search" placeholder="Search by name or phone...">
-         <div class="table-wrapper">
-             <table id="expected-customers-table">
-                <thead><tr><th>Name</th><th>Phone</th><th>Total Visits</th><th>Last Visit</th><th>Avg Days Between Visits</th><th>Expected By</th></tr></thead>
-                <tbody></tbody>
-            </table>
-         </div>
+         <input type="text" id="expected-customers-search" placeholder="Search by name or phone..." style="width: 250px;">
+         <table id="expected-customers-table">
+            <thead><tr><th>Name</th><th>Phone</th><th>Total Visits</th><th>Last Visit</th><th>Avg Days Between Visits</th><th>Expected By</th></tr></thead>
+            <tbody></tbody>
+        </table>
     </div>
     <div id="atRisk-report-content" class="hidden">
         <div id="at-risk-summary" class="report-summary"></div>
-        <input type="text" id="at-risk-search" placeholder="Search by name or phone...">
-        <div class="table-wrapper">
-            <table id="at-risk-table"><thead><tr><th>Name</th><th>Phone</th><th>Total Visits</th><th>Last Visit</th><th>Days Overdue</th><th>Action</th></tr></thead><tbody></tbody></table>
-        </div>
+        <input type="text" id="at-risk-search" placeholder="Search by name or phone..." style="width: 250px;">
+        <table id="at-risk-table"><thead><tr><th>Name</th><th>Phone</th><th>Total Visits</th><th>Last Visit</th><th>Days Overdue</th><th>Action</th></tr></thead><tbody></tbody></table>
     </div>
   </div>
 
@@ -479,12 +435,10 @@ ul { list-style: none; padding: 0; }
   </div>
   <div class="profiles-layout">
     <div class="profile-list">
-      <input type="text" id="profile-search" placeholder="Search customer...">
-      <ul id="customer-list"></ul>
+      <input type="text" id="profile-search" placeholder="Search customer..." style="width: 100%;"><ul id="customer-list"></ul>
     </div>
     <div class="profile-list hidden" id="vip-list-container">
-      <input type="text" id="vip-profile-search" placeholder="Search VIP...">
-      <ul id="vip-customer-list"></ul>
+      <input type="text" id="vip-profile-search" placeholder="Search VIP..." style="width: 100%;"><ul id="vip-customer-list"></ul>
     </div>
     <div class="profile-details" id="profile-details"><p>Select a customer to view profile</p></div>
   </div>
@@ -498,8 +452,22 @@ ul { list-style: none; padding: 0; }
     </div>
 </div>
 
+<!-- Login Modal -->
+<div id="login-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <button class="modal-close" onclick="toggleLoginModal(false)">&times;</button>
+        <h3>Admin Login</h3>
+        <form id="login-form">
+            <input type="email" id="login-email" placeholder="Email" required>
+            <input type="password" id="login-password" placeholder="Password" required>
+            <p id="login-error" class="hidden"></p>
+            <button type="submit" class="btn">Login</button>
+        </form>
+    </div>
+</div>
 
-<script>
+
+<script type="module">
 // --- Global Data Variables ---
 let entries = [];
 let vip = [];
@@ -508,6 +476,7 @@ let vipPhoneSet = new Set();
 let staffSalaryData = {};
 let globalSalarySettings = { otRate: 0, membershipRate: 0 };
 let atRiskList = {};
+let isLoggedIn = false;
 
 // --- Google Sheets API Configuration ---
 const API_KEY = 'AIzaSyA1L51SbLosVZGhNwtGhDlXNQGlqKt8sBI';
@@ -538,7 +507,7 @@ async function fetchDataFromSheet() {
 
     } catch (error) {
         console.error("Error fetching data from Google Sheets:", error);
-        document.getElementById('loading').innerHTML = `<p style="color:red;">Error: Could not load data. Check the console for details.</p>`;
+        // document.getElementById('loading').innerHTML = `<p style="color:red;">Error: Could not load data. Check the console for details.</p>`;
         throw error; // Re-throw to stop app initialization
     }
 }
@@ -615,6 +584,98 @@ function parseStaff(data) {
 }
 
 
+// --- Firebase Functions ---
+const dataDocRef = window.firebase.doc(window.firebase.db, "salonData", "settings");
+
+async function saveDataToFirestore() {
+    try {
+        await window.firebase.setDoc(dataDocRef, {
+            globalSalarySettings,
+            staffSalaryData
+        });
+    } catch (e) {
+        console.error("Error saving data to Firestore: ", e);
+    }
+}
+
+async function loadDataFromFirestore() {
+    try {
+        const docSnap = await window.firebase.getDoc(dataDocRef);
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            globalSalarySettings = data.globalSalarySettings || { otRate: 0, membershipRate: 0 };
+            staffSalaryData = data.staffSalaryData || {};
+            console.log("Data loaded from Firestore.");
+        } else {
+            console.log("No data document found in Firestore. Using defaults.");
+        }
+    } catch (e) {
+        console.error("Error loading data from Firestore: ", e);
+    }
+    // Update UI with loaded data
+    const globalOtInput = document.getElementById('global-ot-rate');
+    const globalMembershipInput = document.getElementById('global-membership-rate');
+    globalOtInput.value = globalSalarySettings.otRate || 0;
+    globalMembershipInput.value = globalSalarySettings.membershipRate || 0;
+    renderStaffTab();
+}
+
+function updateUIonAuthStateChange(user) {
+    isLoggedIn = !!user;
+    const authStatus = document.getElementById('auth-status');
+    const loginBtn = document.getElementById('login-btn');
+    const logoutBtn = document.getElementById('logout-btn');
+
+    if (isLoggedIn) {
+        authStatus.textContent = user.email;
+        loginBtn.classList.add('hidden');
+        logoutBtn.classList.remove('hidden');
+    } else {
+        authStatus.textContent = 'Public View';
+        loginBtn.classList.remove('hidden');
+        logoutBtn.classList.add('hidden');
+    }
+    
+    // Enable/disable all relevant input fields
+    document.querySelectorAll('#staff-tab input').forEach(input => {
+        if (!input.classList.contains('salary-month')) { // keep month selector enabled
+            input.disabled = !isLoggedIn;
+        }
+    });
+}
+
+
+window.toggleLoginModal = (show) => {
+    const modal = document.getElementById('login-modal');
+    if (show) {
+        modal.classList.remove('hidden');
+    } else {
+        modal.classList.add('hidden');
+        document.getElementById('login-error').classList.add('hidden');
+    }
+}
+
+window.handleLogout = () => {
+    window.firebase.signOut(window.firebase.auth).catch(error => console.error("Logout Error:", error));
+}
+
+document.getElementById('login-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-password').value;
+    const errorEl = document.getElementById('login-error');
+
+    window.firebase.signInWithEmailAndPassword(window.firebase.auth, email, password)
+        .then(() => {
+            toggleLoginModal(false);
+        })
+        .catch(error => {
+            errorEl.textContent = error.message;
+            errorEl.classList.remove('hidden');
+        });
+});
+
+
 // --- Helper Functions ---
 function parseDate(dateStr) {
     if (!dateStr) return new Date(0);
@@ -683,7 +744,7 @@ function getFavoriteStaff(phone) {
 
 
 // ---------------- Tab Switching ----------------
-function showTab(tab) {
+window.showTab = (tab) => {
   document.querySelectorAll(".tab").forEach(div => div.classList.add("hidden"));
   document.getElementById(tab + "-tab").classList.remove("hidden");
   
@@ -756,7 +817,7 @@ clearDateFilterBtn.addEventListener("click", () => {
 const oneYearAgo = new Date();
 oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
-function showVipsSubTab(subTabName) {
+window.showVipsSubTab = (subTabName) => {
     document.querySelectorAll('#vips-tab .sub-nav .btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById('active-vips-content').classList.add('hidden');
     document.getElementById('expired-vips-content').classList.add('hidden');
@@ -807,11 +868,11 @@ expiredVipSearchInput.addEventListener("input", (e) => renderExpiredVIPs(e.targe
 
 // ---------------- Customer Details Modal ----------------
 const modalOverlay = document.getElementById('customer-details-modal');
-function closeModal() {
+window.closeModal = () => {
     modalOverlay.classList.add('hidden');
 }
 
-function showCustomerDetailsModal(phone) {
+window.showCustomerDetailsModal = (phone) => {
     const customerHistory = entries.filter(e => e.phone === phone).sort((a, b) => parseDate(b.date) - parseDate(a.date));
     const isVip = vipPhoneSet.has(phone);
     const vipRecord = isVip ? vip.find(v => v.phone === phone) : null;
@@ -893,7 +954,7 @@ function showCustomerDetailsModal(phone) {
         ${headerHTML}
         ${summaryCardsHTML}
         <h4>Service History ${historyHeader}</h4>
-        <div style="max-height: 250px; overflow-y: auto;" class="table-wrapper">
+        <div style="max-height: 250px; overflow-y: auto;">
              <table>
                 <thead><tr><th>Date</th><th>Services</th><th>Staff</th><th>Paid ₹</th></tr></thead>
                 <tbody>
@@ -917,7 +978,7 @@ modalOverlay.addEventListener('click', (e) => {
 const reportMonthInput = document.getElementById("report-month");
 const monthlyDashboard = document.getElementById("monthly-report-dashboard");
 
-function showReportsSubTab(subTabName) {
+window.showReportsSubTab = (subTabName) => {
     document.querySelectorAll('#reports-tab .sub-nav .btn').forEach(btn => btn.classList.remove('active'));
     document.querySelectorAll('#monthly-report-content, #frequent-customers-report-content, #expected-customers-report-content, #atRisk-report-content').forEach(el => el.classList.add('hidden'));
     
@@ -1053,11 +1114,11 @@ function renderMonthlyReport() {
       </div>
       ${generateBarChartHTML(dailyRevenue)}
       <h3>Staff Performance</h3>
-      <div class="table-wrapper"><table><thead><tr><th>Staff Name</th><th>Revenue</th><th>Services</th><th>Memberships This Month</th></tr></thead><tbody>${sortedStaff.map(s => `<tr><td>${s.name}</td><td>₹${s.revenue.toFixed(0)}</td><td>${s.services}</td><td>${s.memberships}</td></tr>`).join("")}</tbody></table></div>
+      <table><thead><tr><th>Staff Name</th><th>Revenue</th><th>Services</th><th>Memberships This Month</th></tr></thead><tbody>${sortedStaff.map(s => `<tr><td>${s.name}</td><td>₹${s.revenue.toFixed(0)}</td><td>${s.services}</td><td>${s.memberships}</td></tr>`).join("")}</tbody></table>
       <h3>Top 5 Spending Customers This Month</h3>
-      <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Phone</th><th>Spent This Month</th></tr></thead><tbody>${topSpenders.map(c => `<tr class="clickable-row" onclick="showCustomerDetailsModal('${c.phone}')"><td>${c.name}</td><td>${c.phone}</td><td>₹${c.spent.toFixed(0)}</td></tr>`).join("")}</tbody></table></div>
+      <table><thead><tr><th>Name</th><th>Phone</th><th>Spent This Month</th></tr></thead><tbody>${topSpenders.map(c => `<tr class="clickable-row" onclick="showCustomerDetailsModal('${c.phone}')"><td>${c.name}</td><td>${c.phone}</td><td>₹${c.spent.toFixed(0)}</td></tr>`).join("")}</tbody></table>
       <h3>Service Popularity</h3>
-      <div class="table-wrapper"><table><thead><tr><th>Service Name</th><th>Times</th><th>Est. Revenue</th></tr></thead><tbody>${sortedServices.map(s => `<tr><td>${s.name}</td><td>${s.count}</td><td>₹${s.revenue.toFixed(0)}</td></tr>`).join("")}</tbody></table></div>
+      <table><thead><tr><th>Service Name</th><th>Times</th><th>Est. Revenue</th></tr></thead><tbody>${sortedServices.map(s => `<tr><td>${s.name}</td><td>${s.count}</td><td>₹${s.revenue.toFixed(0)}</td></tr>`).join("")}</tbody></table>
     `;
 }
 
@@ -1169,7 +1230,7 @@ const atRiskBody = document.querySelector("#at-risk-table tbody");
 const atRiskSearch = document.getElementById("at-risk-search");
 const atRiskSummary = document.getElementById("at-risk-summary");
 
-function removeFromAtRisk(phone) {
+window.removeFromAtRisk = (phone) => {
     delete atRiskList[phone];
     renderAtRiskReport();
 }
@@ -1320,7 +1381,7 @@ function getUniqueCustomers() {
   });
   return Object.values(map);
 }
-function showProfileTab(type) {
+window.showProfileTab = (type) => {
   document.querySelectorAll('#profiles-tab .profile-list').forEach(el => el.classList.add('hidden'));
   document.querySelectorAll('#profiles-tab .sub-nav .btn').forEach(el => el.classList.remove('active'));
     if (type === 'all') {
@@ -1388,7 +1449,7 @@ function showProfile(phone) {
     <p><b>Total Spent:</b> ₹${totalSpent.toFixed(0)}</p>
     <p><b>Favorite Staff:</b> ${favoriteStaff}</p>
     <h4>Service History:</h4>
-    <div class="table-wrapper"><table><thead><tr><th>Date</th><th>Services</th><th>Staff</th><th>Paid ₹</th></tr></thead><tbody>${records.map(r => `<tr><td>${r.date}</td><td>${r.servicesText || ""}</td><td>${r.staff || ""}</td><td>₹${r.paid || 0}</td></tr>`).join("")}</tbody></table></div>`;
+    <table><thead><tr><th>Date</th><th>Services</th><th>Staff</th><th>Paid ₹</th></tr></thead><tbody>${records.map(r => `<tr><td>${r.date}</td><td>${r.servicesText || ""}</td><td>${r.staff || ""}</td><td>₹${r.paid || 0}</td></tr>`).join("")}</tbody></table>`;
 }
 profileSearch.addEventListener("input", (e) => renderCustomerList(e.target.value));
 vipProfileSearch.addEventListener("input", (e) => renderVipCustomerList(e.target.value));
@@ -1403,6 +1464,7 @@ function saveBaseSalary(staffName, value) {
         staffSalaryData[staffName] = { baseSalary: 0, monthlyData: {} };
     }
     staffSalaryData[staffName].baseSalary = value;
+    saveDataToFirestore();
 }
 
 function saveMonthlySalaryData(staffName, month, key, value) {
@@ -1416,6 +1478,7 @@ function saveMonthlySalaryData(staffName, month, key, value) {
         staffSalaryData[staffName].monthlyData[month] = {};
     }
     staffSalaryData[staffName].monthlyData[month][key] = value;
+    saveDataToFirestore();
 }
 
 function showStaffSubTab(staffName) {
@@ -1426,7 +1489,7 @@ function showStaffSubTab(staffName) {
     document.getElementById(`staff-content-${staffName}`).classList.remove('hidden');
 }
 
-function showStaffDetailsSubTab(staffName, tabToShow) {
+window.showStaffDetailsSubTab = (staffName, tabToShow) => {
     const staffDetailsContainer = document.getElementById(`staff-details-${staffName}`);
     if (!staffDetailsContainer) return;
 
@@ -1542,12 +1605,10 @@ function renderStaffMonthlyDetails(staffName, selectedMonth) {
 
     servicesContainer.innerHTML = `
         <h3>Service Records for ${selectedMonth}</h3>
-        <div class="table-wrapper">
-            <table>
-                <thead><tr><th>Date</th><th>Customer</th><th>Services</th><th>Paid ₹</th></tr></thead>
-                <tbody>${servicesTableHTML}</tbody>
-            </table>
-        </div>
+        <table>
+            <thead><tr><th>Date</th><th>Customer</th><th>Services</th><th>Paid ₹</th></tr></thead>
+            <tbody>${servicesTableHTML}</tbody>
+        </table>
     `;
 }
 
@@ -1564,12 +1625,10 @@ function renderStaffAllTimeMemberships(staffName) {
 
     membershipsContainer.innerHTML = `
         <h3>All-Time Membership Signups</h3>
-        <div class="table-wrapper">
-            <table>
-                <thead><tr><th>Join Date</th><th>Customer Name</th><th>Phone</th></tr></thead>
-                <tbody>${membershipsTableHTML}</tbody>
-            </table>
-        </div>
+        <table>
+            <thead><tr><th>Join Date</th><th>Customer Name</th><th>Phone</th></tr></thead>
+            <tbody>${membershipsTableHTML}</tbody>
+        </table>
     `;
 }
 
@@ -1609,12 +1668,10 @@ function renderStaffFrequentCustomers(staffName) {
     container.innerHTML = `
         <h3>Frequent Customers for ${staffName}</h3>
         ${summaryHTML}
-        <div class="table-wrapper">
-            <table>
-                <thead><tr><th>Rank</th><th>Name</th><th>Phone</th><th>Visits (with this staff)</th></tr></thead>
-                <tbody>${tableHTML}</tbody>
-            </table>
-        </div>
+        <table>
+            <thead><tr><th>Rank</th><th>Name</th><th>Phone</th><th>Visits (with this staff)</th></tr></thead>
+            <tbody>${tableHTML}</tbody>
+        </table>
     `;
 }
 
@@ -1648,36 +1705,34 @@ function renderStaffTab() {
                 <label for="salary-month-${name}"><b>Select Month:</b></label>
                 <input type="month" id="salary-month-${name}" class="salary-month">
             </div>
-            <div class="table-wrapper">
-                <table class="salary-table">
-                    <thead>
-                        <tr>
-                            <th>Base Salary</th>
-                            <th>No. of OTs</th>
-                            <th>OT Incentive</th>
-                            <th class="th-with-input">% Incentive <input type="number" class="header-input percent-incentive"></th>
-                            <th>Extra Days</th>
-                            <th>Extra Day Pay</th>
-                            <th>Memberships</th>
-                            <th>Membership Incentive</th>
-                            <th>Total Salary</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><input type="number" class="base-salary" placeholder="0" value="${staffData.baseSalary || ''}"></td>
-                            <td><input type="number" class="ots" placeholder="0"></td>
-                            <td class="output-cell ot-incentive-total">₹0.00</td>
-                            <td class="output-cell percent-incentive-total">₹0.00</td>
-                            <td><input type="number" class="extra-days" placeholder="0"></td>
-                            <td class="output-cell extra-day-pay">₹0.00</td>
-                            <td class="output-cell memberships-count">0</td>
-                            <td class="output-cell membership-incentive-total">₹0.00</td>
-                            <td class="output-cell total-salary">₹0.00</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+            <table class="salary-table">
+                <thead>
+                    <tr>
+                        <th>Base Salary</th>
+                        <th>No. of OTs</th>
+                        <th>OT Incentive</th>
+                        <th class="th-with-input">% Incentive <input type="number" class="header-input percent-incentive" disabled></th>
+                        <th>Extra Days</th>
+                        <th>Extra Day Pay</th>
+                        <th>Memberships</th>
+                        <th>Membership Incentive</th>
+                        <th>Total Salary</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><input type="number" class="base-salary" placeholder="0" value="${staffData.baseSalary || ''}" disabled></td>
+                        <td><input type="number" class="ots" placeholder="0" disabled></td>
+                        <td class="output-cell ot-incentive-total">₹0.00</td>
+                        <td class="output-cell percent-incentive-total">₹0.00</td>
+                        <td><input type="number" class="extra-days" placeholder="0" disabled></td>
+                        <td class="output-cell extra-day-pay">₹0.00</td>
+                        <td class="output-cell memberships-count">0</td>
+                        <td class="output-cell membership-incentive-total">₹0.00</td>
+                        <td class="output-cell total-salary">₹0.00</td>
+                    </tr>
+                </tbody>
+            </table>
             <div class="staff-performance-details" id="staff-details-${name}">
                 <div class="staff-summary" id="staff-summary-${name}" style="margin-top: 25px;"></div>
                 <div class="sub-nav" style="margin-top: 20px;">
@@ -1724,6 +1779,9 @@ function renderStaffTab() {
         salaryMonthInput.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
         salaryMonthInput.dispatchEvent(new Event('change'));
     });
+    
+    // After rendering, update disabled status based on login state
+    updateUIonAuthStateChange(window.firebase.auth.currentUser);
 }
 
 // --- App Initialization ---
@@ -1731,14 +1789,26 @@ async function initializeApp() {
     try {
         await fetchDataFromSheet();
         
+        window.firebase.onAuthStateChanged(window.firebase.auth, async (user) => {
+            updateUIonAuthStateChange(user);
+            if (user) {
+                // User is signed in, load their data
+                await loadDataFromFirestore();
+            } else {
+                // User is signed out, clear local data and re-render
+                staffSalaryData = {};
+                globalSalarySettings = { otRate: 0, membershipRate: 0 };
+                renderStaffTab();
+            }
+        });
+
         // Setup global settings controls
         const globalOtInput = document.getElementById('global-ot-rate');
         const globalMembershipInput = document.getElementById('global-membership-rate');
-        globalOtInput.value = globalSalarySettings.otRate || 0;
-        globalMembershipInput.value = globalSalarySettings.membershipRate || 0;
-
+        
         globalOtInput.addEventListener('input', (e) => {
             globalSalarySettings.otRate = parseFloat(e.target.value) || 0;
+            saveDataToFirestore();
             if (activeStaffName) {
                 const staffDiv = document.getElementById(`staff-content-${activeStaffName}`);
                 const selectedMonth = staffDiv.querySelector('.salary-month').value;
@@ -1747,6 +1817,7 @@ async function initializeApp() {
         });
         globalMembershipInput.addEventListener('input', (e) => {
             globalSalarySettings.membershipRate = parseFloat(e.target.value) || 0;
+            saveDataToFirestore();
             if (activeStaffName) {
                 const staffDiv = document.getElementById(`staff-content-${activeStaffName}`);
                 const selectedMonth = staffDiv.querySelector('.salary-month').value;
@@ -1768,18 +1839,11 @@ async function initializeApp() {
         showProfileTab("all"); 
         renderStaffTab();
         
-        // Hide loading overlay
-        const loadingOverlay = document.getElementById('loading');
-        if (loadingOverlay) {
-            loadingOverlay.classList.add('hidden');
-        }
-
     } catch (error) {
         console.error("Application initialization failed.", error);
     }
 }
 
-// Add a simple loading indicator in case the script takes time to load
 
 document.addEventListener('DOMContentLoaded', initializeApp);
 
