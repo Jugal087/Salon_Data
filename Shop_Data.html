@@ -423,43 +423,68 @@ function buildSheetUrl(sheetName) {
 }
 
 /**
- * Parses CSV text into an array of objects.
- * Handles quoted fields and maps headers to specified keys.
- * @param {string} csvText The raw CSV text.
- * @param {Object} headerMapping An object to map CSV headers to object keys.
- * @param {boolean} isSimpleArray If true, returns an array of the first column's values.
+ * A robust CSV parser for Google Sheet data.
+ * @param {string} csvText - The raw CSV string.
+ * @param {Object} mapping - Maps sheet headers to object keys.
+ * @param {Object} [options={}] - Additional options.
+ * @param {boolean} [options.isSimpleArray=false] - If true, returns a simple array of the first column's values.
+ * @param {string|null} [options.dynamicColPrefix=null] - Prefix for columns to be combined (e.g., 'service').
  * @returns {Array<Object|string>}
  */
-function parseCSV(csvText, headerMapping, isSimpleArray = false) {
-    // Regular expression to split a CSV row, handling quoted fields.
-    const rowSplitRegex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
-    const lines = csvText.trim().split('\n');
-    if (lines.length < 2) return [];
+function parseSheetData(csvText, mapping, options = {}) {
+    const { isSimpleArray = false, dynamicColPrefix = null } = options;
 
-    const header = lines.shift().trim().split(rowSplitRegex).map(h => h.replace(/"/g, ''));
-    const mappedKeys = header.map(h => headerMapping[h] || null);
-
-    if (isSimpleArray) {
-        return lines.map(line => {
-            if (!line.trim()) return null;
-            const value = line.trim().split(rowSplitRegex)[0].replace(/"/g, '');
-            return value;
-        }).filter(Boolean); // Filter out null/empty values
+    if (!csvText || csvText.trim().startsWith('<') || csvText.trim().startsWith('{')) {
+        console.error("Invalid CSV data received.", csvText ? csvText.substring(0, 300) : "Empty response");
+        return [];
     }
 
+    const lines = csvText.trim().split(/\r?\n/);
+    if (lines.length < 2) return [];
+
+    const splitRegex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+    const rawHeaders = lines.shift().split(splitRegex);
+    const headers = rawHeaders.map(h => h.replace(/"/g, '').trim());
+
+    if (isSimpleArray) {
+        const targetHeader = Object.keys(mapping)[0];
+        const targetIndex = headers.findIndex(h => h === targetHeader);
+        if (targetIndex === -1) {
+            console.error(`Header "${targetHeader}" not found for simple array parsing.`);
+            return [];
+        }
+        return lines.map(line => {
+            if (!line.trim()) return null;
+            const values = line.trim().split(splitRegex);
+            return values[targetIndex]?.replace(/"/g, '').trim();
+        }).filter(Boolean);
+    }
+    
     return lines.map(line => {
         if (!line.trim()) return null;
-        const values = line.trim().split(rowSplitRegex);
+        const values = line.trim().split(splitRegex).map(v => v.replace(/^"|"$/g, '').trim());
         const obj = {};
-        mappedKeys.forEach((key, index) => {
-            if (key && index < values.length) {
-                // Remove quotes and trim whitespace from the value
-                obj[key] = values[index].replace(/^"|"$/g, '').trim();
+        const dynamicValues = [];
+
+        headers.forEach((header, index) => {
+            const mappedKey = mapping[header];
+            if (mappedKey) {
+                obj[mappedKey] = values[index];
+            } else if (dynamicColPrefix && header.toLowerCase().startsWith(dynamicColPrefix)) {
+                if (values[index]) {
+                    dynamicValues.push(values[index]);
+                }
             }
         });
-        return obj;
+
+        if (dynamicColPrefix) {
+            obj[dynamicColPrefix + 'Text'] = dynamicValues.join(', ');
+        }
+        
+        return Object.values(obj).some(v => v) ? obj : null;
     }).filter(Boolean);
 }
+
 
 async function loadDataFromSheet() {
     const loader = document.getElementById('loader');
@@ -470,19 +495,17 @@ async function loadDataFromSheet() {
         const vipUrl = buildSheetUrl('VIP Members');
         const staffUrl = buildSheetUrl('Staff');
 
-        // Define header mappings
+        // Mappings now use trimmed keys, which the robust parser will match against.
         const entriesMapping = {
-            'Date': 'date', 'Phone Number': 'phone', 'Customer Name': 'name',
-            'Services': 'servicesText', 'Staff Member': 'staff', 'Member': 'member',
-            'Total Amount': 'total', 'Amount Paid': 'paid'
+            'Date': 'date', 'Phone': 'phone', 'Name': 'name',
+            'Staff': 'staff', 'Member': 'member', 'Total': 'total', 'Paid ₹': 'paid'
         };
         const vipMapping = {
             'Date of Joining': 'date', 'Phone Number': 'phone',
             'Customer Name': 'name', 'Referred by': 'staff'
         };
         const staffMapping = { 'Staff Name': 'name' };
-
-        // Fetch all sheets in parallel
+       
         const [entriesRes, vipRes, staffRes] = await Promise.all([
             fetch(entriesUrl), fetch(vipUrl), fetch(staffUrl)
         ]);
@@ -495,20 +518,22 @@ async function loadDataFromSheet() {
             entriesRes.text(), vipRes.text(), staffRes.text()
         ]);
 
-        // Parse data and update global variables
-        entries = parseCSV(entriesText, entriesMapping);
-        vip = parseCSV(vipText, vipMapping);
-        staffMembers = parseCSV(staffText, staffMapping, true); // Get a simple array of names
+        // Use the new universal parser for all sheets
+        entries = parseSheetData(entriesText, entriesMapping, { dynamicColPrefix: 'service' });
+        vip = parseSheetData(vipText, vipMapping);
+        staffMembers = parseSheetData(staffText, staffMapping, { isSimpleArray: true });
 
         vipPhoneSet = new Set(vip.map(v => v.phone));
+        
+        if (entries.length === 0 && staffMembers.length === 0) {
+            throw new Error("Parsing resulted in empty data. Check CSV format and sheet permissions.");
+        }
 
     } catch (error) {
         console.error("Failed to load data from Google Sheet:", error);
-        loader.innerHTML = '<p style="color:red;">Error loading data. Please check the console and ensure the Google Sheet is public.</p>';
-        // Do not hide the loader on error
+        loader.innerHTML = '<p style="color:red; max-width: 400px; text-align: center;">Error loading data. <br>Please ensure the Google Sheet sharing setting is "Anyone with the link can view".</p>';
         return false; // Indicate failure
     } finally {
-        // Only hide the loader on success
         if (!loader.querySelector('p[style*="color:red"]')) {
              loader.classList.add('hidden');
         }
@@ -538,8 +563,6 @@ function initializeAllUI() {
     renderVipCustomerList();
     showProfileTab("all"); 
     renderStaffTab();
-
-    // Re-attach static listeners that might be inside rendered content if needed (not the case here)
 }
 
 
@@ -550,12 +573,16 @@ function parseDate(dateStr) {
     let parts;
     if (dateStr.includes('-')) {
       parts = dateStr.split('-');
-      return new Date(parts[2], parts[1] - 1, parts[0]); // DD-MM-YYYY
+      // Handles DD-MM-YYYY
+      if (parts.length === 3) return new Date(parts[2], parts[1] - 1, parts[0]); 
     } else if (dateStr.includes('/')) {
       parts = dateStr.split('/');
-      return new Date(parts[2], parts[0] - 1, parts[1]); // MM/DD/YYYY
+       // Handles MM/DD/YYYY
+      if (parts.length === 3) return new Date(parts[2], parts[0] - 1, parts[1]);
     }
-    return new Date(dateStr); // Fallback for standard date formats
+    // Fallback for standard date formats like YYYY-MM-DD
+    const parsed = new Date(dateStr);
+    return isNaN(parsed.getTime()) ? new Date(0) : parsed;
 }
 
 // Helper to get the date range for staff calculations (25th of last month to 24th of this month)
@@ -643,7 +670,7 @@ function renderCustomers(filter = "") {
   const filtered = sortedEntries.filter(e => (e.name || "").toLowerCase().includes(filter.toLowerCase()) || (e.phone || "").toLowerCase().includes(filter.toLowerCase()));
   filtered.forEach(e => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${e.date}</td><td>${e.phone}</td><td>${e.name}</td><td>${e.servicesText || ""}</td><td>${e.staff || ""}</td><td>${e.member || "Normal"}</td><td>₹${e.total || 0}</td><td>₹${e.paid || 0}</td>`;
+    tr.innerHTML = `<td>${e.date || ''}</td><td>${e.phone || ''}</td><td>${e.name || ''}</td><td>${e.serviceText || ""}</td><td>${e.staff || ""}</td><td>${e.member || "Normal"}</td><td>₹${e.total || 0}</td><td>₹${e.paid || 0}</td>`;
     customerBody.appendChild(tr);
   });
 }
@@ -675,7 +702,7 @@ function renderActiveVIPs(filter = "") {
     const tr = document.createElement("tr");
     tr.className = 'clickable-row';
     tr.setAttribute('onclick', `showCustomerDetailsModal('${v.phone}')`);
-    tr.innerHTML = `<td>${v.phone}</td><td>${v.name}</td><td>${v.date}</td><td>${v.staff || ""}</td>`;
+    tr.innerHTML = `<td>${v.phone || ''}</td><td>${v.name || ''}</td><td>${v.date || ''}</td><td>${v.staff || ""}</td>`;
     vipBody.appendChild(tr);
   });
 }
@@ -696,7 +723,7 @@ function renderExpiredVIPs(filter = "") {
         expiryDate.setFullYear(expiryDate.getFullYear() + 1);
         tr.className = 'clickable-row';
         tr.setAttribute('onclick', `showCustomerDetailsModal('${v.phone}')`);
-        tr.innerHTML = `<td>${v.phone}</td><td>${v.name}</td><td>${v.date}</td><td>${expiryDate.toLocaleDateString('en-GB')}</td>`;
+        tr.innerHTML = `<td>${v.phone || ''}</td><td>${v.name || ''}</td><td>${v.date || ''}</td><td>${expiryDate.toLocaleDateString('en-GB')}</td>`;
         expiredVipBody.appendChild(tr);
     });
 }
@@ -794,7 +821,7 @@ function showCustomerDetailsModal(phone) {
              <table>
                 <thead><tr><th>Date</th><th>Services</th><th>Staff</th><th>Paid ₹</th></tr></thead>
                 <tbody>
-                    ${customerHistory.length > 0 ? customerHistory.map(r => `<tr><td>${r.date}</td><td>${r.servicesText || ""}</td><td>${r.staff || ""}</td><td>₹${r.paid || 0}</td></tr>`).join("") : '<tr><td colspan="4" style="text-align:center;">No service history found.</td></tr>'}
+                    ${customerHistory.length > 0 ? customerHistory.map(r => `<tr><td>${r.date}</td><td>${r.serviceText || ""}</td><td>${r.staff || ""}</td><td>₹${r.paid || 0}</td></tr>`).join("") : '<tr><td colspan="4" style="text-align:center;">No service history found.</td></tr>'}
                 </tbody>
             </table>
         </div>
@@ -849,8 +876,15 @@ function showReportsSubTab(subTabName) {
     }
 }
 
-function getMetricsForMonth(monthStr) {
-    const monthlyEntries = entries.filter(e => e.date && `${e.date.slice(6,10)}-${e.date.slice(3,5)}` === monthStr);
+function getMetricsForMonth(monthStr) { // Expects "YYYY-MM"
+    const [year, month] = monthStr.split('-').map(Number);
+    
+    const monthlyEntries = entries.filter(e => {
+        if (!e.date) return false;
+        const entryDate = parseDate(e.date);
+        return entryDate.getFullYear() === year && (entryDate.getMonth() + 1) === month;
+    });
+
     const uniqueCustomersThisMonth = new Set(monthlyEntries.filter(e => e.phone && e.phone !== '0').map(e => e.phone));
     
     const metrics = {
@@ -865,7 +899,6 @@ function getMetricsForMonth(monthStr) {
     };
 
     if (monthlyEntries.length > 0) {
-        const [year, month] = monthStr.split('-').map(Number);
         const monthStartDate = new Date(year, month - 1, 1);
         const previousCustomers = new Set(entries.filter(e => e.phone && e.phone !== '0' && parseDate(e.date) < monthStartDate).map(e => e.phone));
         let recurring = 0;
@@ -885,29 +918,29 @@ function getComparisonIndicator(current, previous) {
 }
 
 function renderMonthlyReport() {
-    const selectedMonth = reportMonthInput.value;
+    const selectedMonth = reportMonthInput.value; // "YYYY-MM"
     if (!selectedMonth) { monthlyDashboard.innerHTML = "<p>Please select a month.</p>"; return; }
-    const monthlyEntries = entries.filter(e => {
-        if (!e.date || typeof e.date !== 'string') return false;
-        // Assuming DD-MM-YYYY format
-        const entryMonth = e.date.substring(3); // "MM-YYYY"
-        const selectedMonthFormatted = selectedMonth.substring(5) + '-' + selectedMonth.substring(0, 4); // "MM-YYYY"
-        return entryMonth === selectedMonthFormatted;
-    });
 
+    const [year, month] = selectedMonth.split('-').map(Number);
+
+    const monthlyEntries = entries.filter(e => {
+        if (!e.date) return false;
+        const entryDate = parseDate(e.date);
+        return entryDate.getFullYear() === year && (entryDate.getMonth() + 1) === month;
+    });
+    
     if (monthlyEntries.length === 0) { monthlyDashboard.innerHTML = `<h3>No data found for ${selectedMonth}.</h3>`; return; }
 
     const currentMetrics = getMetricsForMonth(selectedMonth);
-    const d = new Date(selectedMonth + '-02');
+    const d = new Date(year, month - 1, 1);
     d.setMonth(d.getMonth() - 1);
     const prevMonthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     const prevMetrics = getMetricsForMonth(prevMonthStr);
     
     const newVipsThisMonth = vip.filter(v => {
-        if (!v.date || typeof v.date !== 'string') return false;
-        const vipMonth = v.date.substring(3);
-        const selectedMonthFormatted = selectedMonth.substring(5) + '-' + selectedMonth.substring(0, 4);
-        return vipMonth === selectedMonthFormatted;
+        if (!v.date) return false;
+        const vipDate = parseDate(v.date);
+        return vipDate.getFullYear() === year && (vipDate.getMonth() + 1) === month;
     });
     
     const staffPerformance = {};
@@ -918,15 +951,18 @@ function renderMonthlyReport() {
         staffPerformance[e.staff].services++;
     });
     newVipsThisMonth.forEach(v => {
-        if(v.staff && staffPerformance[v.staff]) staffPerformance[v.staff].memberships++;
-        else if(v.staff) staffPerformance[v.staff] = { name: v.staff, revenue: 0, services: 0, memberships: 1 };
+        if(v.staff && staffPerformance[v.staff]) {
+          staffPerformance[v.staff].memberships++;
+        } else if (v.staff) {
+          staffPerformance[v.staff] = { name: v.staff, revenue: 0, services: 0, memberships: 1 };
+        }
     });
     const sortedStaff = Object.values(staffPerformance).sort((a, b) => b.revenue - a.revenue);
 
     const serviceStats = {};
     monthlyEntries.forEach(e => {
-        if (!e.servicesText) return;
-        const services = e.servicesText.split(',').map(s => s.trim()).filter(Boolean);
+        if (!e.serviceText) return;
+        const services = e.serviceText.split(',').map(s => s.trim()).filter(Boolean);
         const revenuePerService = services.length > 0 ? (Number(e.paid) || 0) / services.length : 0;
         services.forEach(name => {
             if (!serviceStats[name]) serviceStats[name] = { name, count: 0, revenue: 0 };
@@ -947,7 +983,7 @@ function renderMonthlyReport() {
 
     const dailyRevenue = {};
     monthlyEntries.forEach(e => {
-        const day = e.date.slice(0, 2);
+        const day = parseDate(e.date).getDate();
         dailyRevenue[day] = (dailyRevenue[day] || 0) + (Number(e.paid) || 0);
     });
 
@@ -982,7 +1018,7 @@ function getFrequentCustomersData() {
 }
 function renderFrequentCustomersReport(filter = "") {
     const frequentCustomers = getFrequentCustomersData();
-    const filtered = frequentCustomers.filter(c => c.name.toLowerCase().includes(filter.toLowerCase()) || c.phone.includes(filter));
+    const filtered = frequentCustomers.filter(c => (c.name || '').toLowerCase().includes(filter.toLowerCase()) || (c.phone || '').includes(filter));
     frequentCustomersBody.innerHTML = "";
     
     if (frequentCustomers.length > 0) {
@@ -1045,7 +1081,7 @@ const expectedCustomersSummary = document.getElementById("expected-customers-sum
 
 function renderExpectedCustomersReport(filter = "") {
     const allExpected = getExpectedCustomersData();
-    const filtered = allExpected.filter(c => c.name.toLowerCase().includes(filter.toLowerCase()) || c.phone.includes(filter));
+    const filtered = allExpected.filter(c => (c.name || '').toLowerCase().includes(filter.toLowerCase()) || (c.phone || '').includes(filter));
     
     if (allExpected.length > 0) {
         const today = new Date();
@@ -1072,8 +1108,6 @@ function renderExpectedCustomersReport(filter = "") {
 expectedCustomersSearch.addEventListener("input", e => renderExpectedCustomersReport(e.target.value));
 
 function getExpectedCustomersData() {
-    const today = new Date();
-    // Loosened the filter to show customers expected soon as well
     return getVisitFrequencyData().filter(c => !atRiskList[c.phone]);
 }
 
@@ -1121,7 +1155,7 @@ function getAtRiskData() {
 
 function renderAtRiskReport(filter = "") {
     const allAtRisk = getAtRiskData();
-    const filtered = allAtRisk.filter(c => c.name.toLowerCase().includes(filter.toLowerCase()) || c.phone.includes(filter));
+    const filtered = allAtRisk.filter(c => (c.name || '').toLowerCase().includes(filter.toLowerCase()) || (c.phone || '').includes(filter));
     
     if (allAtRisk.length > 0) {
         const avgDaysOverdue = allAtRisk.reduce((sum, c) => sum + c.daysOverdue, 0) / allAtRisk.length;
@@ -1250,7 +1284,7 @@ function showProfileTab(type) {
 }
 function renderCustomerList(filter = "") {
   customerList.innerHTML = "";
-  const customers = getUniqueCustomers().filter(c => c.phone.includes(filter) || (c.name || "").toLowerCase().includes(filter.toLowerCase()));
+  const customers = getUniqueCustomers().filter(c => (c.phone || '').includes(filter) || (c.name || "").toLowerCase().includes(filter.toLowerCase()));
   customers.forEach(c => {
     const li = document.createElement("li");
     li.className = "customer-item";
@@ -1302,7 +1336,7 @@ function showProfile(phone) {
     <p><b>Total Spent:</b> ₹${totalSpent.toFixed(0)}</p>
     <p><b>Favorite Staff:</b> ${favoriteStaff}</p>
     <h4>Service History:</h4>
-    <table><thead><tr><th>Date</th><th>Services</th><th>Staff</th><th>Paid ₹</th></tr></thead><tbody>${records.map(r => `<tr><td>${r.date}</td><td>${r.servicesText || ""}</td><td>${r.staff || ""}</td><td>₹${r.paid || 0}</td></tr>`).join("")}</tbody></table>`;
+    <table><thead><tr><th>Date</th><th>Services</th><th>Staff</th><th>Paid ₹</th></tr></thead><tbody>${records.map(r => `<tr><td>${r.date}</td><td>${r.serviceText || ""}</td><td>${r.staff || ""}</td><td>₹${r.paid || 0}</td></tr>`).join("")}</tbody></table>`;
 }
 profileSearch.addEventListener("input", (e) => renderCustomerList(e.target.value));
 vipProfileSearch.addEventListener("input", (e) => renderVipCustomerList(e.target.value));
@@ -1435,7 +1469,7 @@ function renderStaffMonthlyDetails(staffName, selectedMonth) {
     });
 
     const vipsThisMonth = vip.filter(v => {
-        if (!v.staff || v.staff !== staffName || !v.date) return false;
+        if (!v.staff || v.staff !== staffName || !e.date) return false;
         const vipDate = parseDate(v.date);
         return vipDate >= startDate && vipDate < endDate;
     });
@@ -1453,7 +1487,7 @@ function renderStaffMonthlyDetails(staffName, selectedMonth) {
     `;
 
     const servicesTableHTML = records.length > 0 ?
-        records.sort((a,b) => parseDate(b.date) - parseDate(a.date)).map(r => `<tr class="clickable-row" onclick="showCustomerDetailsModal('${r.phone}')"><td>${r.date}</td><td>${r.name} (${r.phone})</td><td>${r.servicesText || ""}</td><td>₹${r.paid || 0}</td></tr>`).join("") :
+        records.sort((a,b) => parseDate(b.date) - parseDate(a.date)).map(r => `<tr class="clickable-row" onclick="showCustomerDetailsModal('${r.phone}')"><td>${r.date}</td><td>${r.name} (${r.phone})</td><td>${r.serviceText || ""}</td><td>₹${r.paid || 0}</td></tr>`).join("") :
         '<tr><td colspan="4" style="text-align:center;">No services recorded for this month.</td></tr>';
 
     servicesContainer.innerHTML = `
@@ -1673,8 +1707,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Set up polling to refresh data every 5 minutes
         setInterval(async () => {
             console.log("Refreshing data from Google Sheet...");
-            await loadDataFromSheet();
-            initializeAllUI();
+            const refreshSuccess = await loadDataFromSheet();
+            if(refreshSuccess) {
+              initializeAllUI();
+            }
         }, 300000); // 300000 ms = 5 minutes
     }
 });
@@ -1683,3 +1719,4 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 </body>
 </html>
+
