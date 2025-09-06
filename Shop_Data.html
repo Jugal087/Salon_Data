@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <title>Salon Data Manager</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
   <style>
@@ -95,19 +94,7 @@ h4 { font-size: 16px; margin: 20px 0 8px 0; color: #34495e; }
 
 
 /* ===== Tables ===== */
-.table-wrapper {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch; /* Smoother scrolling on iOS */
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    margin-top: 10px;
-}
-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: var(--card);
-    min-width: 600px; /* Force scroll on smaller screens */
-}
+table { width: 100%; border-collapse: collapse; margin-top: 10px; background: var(--card); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
 th, td { padding: 12px 15px; text-align: left; font-size: 1rem; }
 th { background: #f1f5f9; font-weight: 600; color: #2c3e50; font-size: 15px; text-transform: uppercase; }
 tr:nth-child(even) td { background: #fafafa; }
@@ -291,80 +278,6 @@ ul { list-style: none; padding: 0; }
     display: flex; justify-content: center; align-items: center;
     z-index: 9999; font-size: 1.5em; color: var(--text);
 }
-
-
-/* ===== Responsive Styles ===== */
-@media screen and (max-width: 768px) {
-    body {
-        padding: 10px;
-        font-size: 15px;
-    }
-    h1 { font-size: 22px; }
-    h2 { font-size: 20px; }
-    h3 { font-size: 17px; }
-
-    .nav { justify-content: flex-start; }
-    .btn { padding: 8px 16px; font-size: 0.9rem; }
-    .sub-nav { gap: 15px; }
-    .sub-nav .btn { font-size: 0.9rem; padding: 8px 2px; }
-
-    .profiles-layout {
-        grid-template-columns: 1fr;
-        gap: 15px;
-    }
-    .profile-list, .profile-details {
-        height: auto;
-        max-height: 40vh; /* Use viewport height for better scaling */
-    }
-    .controls-bar {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    .controls-bar input, .controls-bar div {
-        width: 100%;
-        margin: 0 0 10px 0 !important;
-    }
-    #daily-total-display {
-        text-align: right;
-        padding: 5px 0;
-        width: 100%;
-    }
-
-    .staff-salary-controls, #global-salary-settings {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 8px;
-        padding: 10px;
-    }
-    .staff-salary-controls input, #global-salary-settings input {
-        width: 100%;
-    }
-    .th-with-input {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 5px;
-    }
-    .header-input {
-        width: 100% !important;
-        margin: 0;
-    }
-
-    .modal-content {
-        width: 95%;
-        padding: 20px 15px;
-        max-height: 85vh;
-    }
-    .modal-summary {
-        gap: 10px;
-    }
-
-    th, td {
-        padding: 10px 12px;
-        font-size: 0.85rem;
-        white-space: nowrap; /* Prevent text wrapping inside cells */
-    }
-
-}
   </style>
 
 </head>
@@ -384,9 +297,9 @@ ul { list-style: none; padding: 0; }
       <h2>Staff Data</h2>
        <div id="global-salary-settings">
             <label>Global Incentive per OT (₹):</label>
-            <input type="number" id="global-ot-rate">
+            <input type="number" id="global-ot-rate" style="width: 100px;">
             <label>Global Membership Incentive (₹):</label>
-            <input type="number" id="global-membership-rate">
+            <input type="number" id="global-membership-rate" style="width: 100px;">
         </div>
       <div id="staff-sub-nav" class="sub-nav">
           </div>
@@ -396,18 +309,16 @@ ul { list-style: none; padding: 0; }
 
   <div id="customers-tab" class="tab hidden">
     <h2>Customer Manager</h2>
-    <div class="controls-bar">
-        <input type="text" id="search" placeholder="Search by name or phone...">
-        <div style="display: flex; align-items: center;">
+    <div class="controls-bar" style="justify-content: flex-start; margin-bottom: 15px;">
+        <input type="text" id="search" placeholder="Search by name or phone..." style="width: 250px; margin-bottom: 0;">
+        <div style="margin-left: 20px; display: flex; align-items: center;">
             <label for="customer-date-filter" style="margin-right: 8px; font-weight: 600;">Filter by Date:</label>
-            <input type="date" id="customer-date-filter" style="margin-bottom: 0;">
+            <input type="date" id="customer-date-filter" style="width: auto; margin-bottom: 0;">
         </div>
-        <button id="clear-date-filter-btn" class="btn" style="padding: 8px 16px; font-size: 0.9rem;">Clear Date</button>
-        <div id="daily-total-display" class="summary" style="font-size: 1.3rem; align-self: center; line-height: 18px;"></div>
+        <button id="clear-date-filter-btn" class="btn" style="padding: 8px 16px; font-size: 0.9rem; margin-left: 10px;">Clear Date</button>
+        <div id="daily-total-display" class="summary" style="margin-left: auto; font-size: 1.3rem; align-self: center; line-height: 18px;"></div>
     </div>
-    <div class="table-wrapper">
-        <table id="customer-table"><thead><tr><th>Date</th><th>Phone</th><th>Name</th><th>Services</th><th>Staff</th><th>Member</th><th>Total ₹</th><th>Paid ₹</th></tr></thead><tbody></tbody></table>
-    </div>
+    <table id="customer-table"><thead><tr><th>Date</th><th>Phone</th><th>Name</th><th>Services</th><th>Staff</th><th>Member</th><th>Total ₹</th><th>Paid ₹</th></tr></thead><tbody></tbody></table>
   </div>
 
   <div id="vips-tab" class="tab hidden">
@@ -417,16 +328,12 @@ ul { list-style: none; padding: 0; }
         <button class="btn" id="expired-vips-btn" onclick="showVipsSubTab('expired')">Expired VIPs</button>
     </div>
     <div id="active-vips-content">
-      <input type="text" id="vip-search" placeholder="Search active VIPs..."><div id="vip-count" class="summary"></div>
-      <div class="table-wrapper">
-          <table id="vip-table"><thead><tr><th>Phone</th><th>Name</th><th>Join Date</th><th>Staff</th></tr></thead><tbody></tbody></table>
-      </div>
+      <input type="text" id="vip-search" placeholder="Search active VIPs..." style="width: 250px;"><div id="vip-count" class="summary"></div>
+      <table id="vip-table"><thead><tr><th>Phone</th><th>Name</th><th>Join Date</th><th>Staff</th></tr></thead><tbody></tbody></table>
     </div>
     <div id="expired-vips-content" class="hidden">
-      <input type="text" id="expired-vip-search" placeholder="Search expired VIPs..."><div id="expired-vip-count" class="summary"></div>
-      <div class="table-wrapper">
-          <table id="expired-vip-table"><thead><tr><th>Phone</th><th>Name</th><th>Join Date</th><th>Expired On</th></tr></thead><tbody></tbody></table>
-      </div>
+      <input type="text" id="expired-vip-search" placeholder="Search expired VIPs..." style="width: 250px;"><div id="expired-vip-count" class="summary"></div>
+      <table id="expired-vip-table"><thead><tr><th>Phone</th><th>Name</th><th>Join Date</th><th>Expired On</th></tr></thead><tbody></tbody></table>
     </div>
   </div>
 
@@ -440,34 +347,28 @@ ul { list-style: none; padding: 0; }
     </div>
     <div id="monthly-report-content">
         <div class="controls-bar">
-            <div><label for="report-month"><b>Select Month:</b></label> <input type="month" id="report-month"></div>
+            <div><label for="report-month"><b>Select Month:</b></label> <input type="month" id="report-month" style="width: 250px;"></div>
             <button class="btn export-btn" id="export-contacts-btn">Export Contacts</button>
         </div>
         <div id="monthly-report-dashboard"></div>
     </div>
     <div id="frequent-customers-report-content" class="hidden">
         <div id="frequent-customers-summary" class="report-summary"></div>
-        <input type="text" id="frequent-customers-search" placeholder="Search by name or phone...">
-        <div class="table-wrapper">
-            <table id="frequent-customers-table"><thead><tr><th>Rank</th><th>Name</th><th>Phone</th><th>Total Visits</th><th>Avg Spend</th><th>Last Visit Date</th></tr></thead><tbody></tbody></table>
-        </div>
+        <input type="text" id="frequent-customers-search" placeholder="Search by name or phone..." style="width: 250px;">
+        <table id="frequent-customers-table"><thead><tr><th>Rank</th><th>Name</th><th>Phone</th><th>Total Visits</th><th>Avg Spend</th><th>Last Visit Date</th></tr></thead><tbody></tbody></table>
     </div>
      <div id="expected-customers-report-content" class="hidden">
          <div id="expected-customers-summary" class="report-summary"></div>
-         <input type="text" id="expected-customers-search" placeholder="Search by name or phone...">
-         <div class="table-wrapper">
-             <table id="expected-customers-table">
-                <thead><tr><th>Name</th><th>Phone</th><th>Total Visits</th><th>Last Visit</th><th>Avg Days Between Visits</th><th>Expected By</th></tr></thead>
-                <tbody></tbody>
-            </table>
-         </div>
+         <input type="text" id="expected-customers-search" placeholder="Search by name or phone..." style="width: 250px;">
+         <table id="expected-customers-table">
+            <thead><tr><th>Name</th><th>Phone</th><th>Total Visits</th><th>Last Visit</th><th>Avg Days Between Visits</th><th>Expected By</th></tr></thead>
+            <tbody></tbody>
+        </table>
     </div>
     <div id="atRisk-report-content" class="hidden">
         <div id="at-risk-summary" class="report-summary"></div>
-        <input type="text" id="at-risk-search" placeholder="Search by name or phone...">
-        <div class="table-wrapper">
-            <table id="at-risk-table"><thead><tr><th>Name</th><th>Phone</th><th>Total Visits</th><th>Last Visit</th><th>Days Overdue</th><th>Action</th></tr></thead><tbody></tbody></table>
-        </div>
+        <input type="text" id="at-risk-search" placeholder="Search by name or phone..." style="width: 250px;">
+        <table id="at-risk-table"><thead><tr><th>Name</th><th>Phone</th><th>Total Visits</th><th>Last Visit</th><th>Days Overdue</th><th>Action</th></tr></thead><tbody></tbody></table>
     </div>
   </div>
 
@@ -479,12 +380,10 @@ ul { list-style: none; padding: 0; }
   </div>
   <div class="profiles-layout">
     <div class="profile-list">
-      <input type="text" id="profile-search" placeholder="Search customer...">
-      <ul id="customer-list"></ul>
+      <input type="text" id="profile-search" placeholder="Search customer..." style="width: 100%;"><ul id="customer-list"></ul>
     </div>
     <div class="profile-list hidden" id="vip-list-container">
-      <input type="text" id="vip-profile-search" placeholder="Search VIP...">
-      <ul id="vip-customer-list"></ul>
+      <input type="text" id="vip-profile-search" placeholder="Search VIP..." style="width: 100%;"><ul id="vip-customer-list"></ul>
     </div>
     <div class="profile-details" id="profile-details"><p>Select a customer to view profile</p></div>
   </div>
@@ -893,7 +792,7 @@ function showCustomerDetailsModal(phone) {
         ${headerHTML}
         ${summaryCardsHTML}
         <h4>Service History ${historyHeader}</h4>
-        <div style="max-height: 250px; overflow-y: auto;" class="table-wrapper">
+        <div style="max-height: 250px; overflow-y: auto;">
              <table>
                 <thead><tr><th>Date</th><th>Services</th><th>Staff</th><th>Paid ₹</th></tr></thead>
                 <tbody>
@@ -1053,11 +952,11 @@ function renderMonthlyReport() {
       </div>
       ${generateBarChartHTML(dailyRevenue)}
       <h3>Staff Performance</h3>
-      <div class="table-wrapper"><table><thead><tr><th>Staff Name</th><th>Revenue</th><th>Services</th><th>Memberships This Month</th></tr></thead><tbody>${sortedStaff.map(s => `<tr><td>${s.name}</td><td>₹${s.revenue.toFixed(0)}</td><td>${s.services}</td><td>${s.memberships}</td></tr>`).join("")}</tbody></table></div>
+      <table><thead><tr><th>Staff Name</th><th>Revenue</th><th>Services</th><th>Memberships This Month</th></tr></thead><tbody>${sortedStaff.map(s => `<tr><td>${s.name}</td><td>₹${s.revenue.toFixed(0)}</td><td>${s.services}</td><td>${s.memberships}</td></tr>`).join("")}</tbody></table>
       <h3>Top 5 Spending Customers This Month</h3>
-      <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Phone</th><th>Spent This Month</th></tr></thead><tbody>${topSpenders.map(c => `<tr class="clickable-row" onclick="showCustomerDetailsModal('${c.phone}')"><td>${c.name}</td><td>${c.phone}</td><td>₹${c.spent.toFixed(0)}</td></tr>`).join("")}</tbody></table></div>
+      <table><thead><tr><th>Name</th><th>Phone</th><th>Spent This Month</th></tr></thead><tbody>${topSpenders.map(c => `<tr class="clickable-row" onclick="showCustomerDetailsModal('${c.phone}')"><td>${c.name}</td><td>${c.phone}</td><td>₹${c.spent.toFixed(0)}</td></tr>`).join("")}</tbody></table>
       <h3>Service Popularity</h3>
-      <div class="table-wrapper"><table><thead><tr><th>Service Name</th><th>Times</th><th>Est. Revenue</th></tr></thead><tbody>${sortedServices.map(s => `<tr><td>${s.name}</td><td>${s.count}</td><td>₹${s.revenue.toFixed(0)}</td></tr>`).join("")}</tbody></table></div>
+      <table><thead><tr><th>Service Name</th><th>Times</th><th>Est. Revenue</th></tr></thead><tbody>${sortedServices.map(s => `<tr><td>${s.name}</td><td>${s.count}</td><td>₹${s.revenue.toFixed(0)}</td></tr>`).join("")}</tbody></table>
     `;
 }
 
@@ -1388,7 +1287,7 @@ function showProfile(phone) {
     <p><b>Total Spent:</b> ₹${totalSpent.toFixed(0)}</p>
     <p><b>Favorite Staff:</b> ${favoriteStaff}</p>
     <h4>Service History:</h4>
-    <div class="table-wrapper"><table><thead><tr><th>Date</th><th>Services</th><th>Staff</th><th>Paid ₹</th></tr></thead><tbody>${records.map(r => `<tr><td>${r.date}</td><td>${r.servicesText || ""}</td><td>${r.staff || ""}</td><td>₹${r.paid || 0}</td></tr>`).join("")}</tbody></table></div>`;
+    <table><thead><tr><th>Date</th><th>Services</th><th>Staff</th><th>Paid ₹</th></tr></thead><tbody>${records.map(r => `<tr><td>${r.date}</td><td>${r.servicesText || ""}</td><td>${r.staff || ""}</td><td>₹${r.paid || 0}</td></tr>`).join("")}</tbody></table>`;
 }
 profileSearch.addEventListener("input", (e) => renderCustomerList(e.target.value));
 vipProfileSearch.addEventListener("input", (e) => renderVipCustomerList(e.target.value));
@@ -1542,12 +1441,10 @@ function renderStaffMonthlyDetails(staffName, selectedMonth) {
 
     servicesContainer.innerHTML = `
         <h3>Service Records for ${selectedMonth}</h3>
-        <div class="table-wrapper">
-            <table>
-                <thead><tr><th>Date</th><th>Customer</th><th>Services</th><th>Paid ₹</th></tr></thead>
-                <tbody>${servicesTableHTML}</tbody>
-            </table>
-        </div>
+        <table>
+            <thead><tr><th>Date</th><th>Customer</th><th>Services</th><th>Paid ₹</th></tr></thead>
+            <tbody>${servicesTableHTML}</tbody>
+        </table>
     `;
 }
 
@@ -1564,12 +1461,10 @@ function renderStaffAllTimeMemberships(staffName) {
 
     membershipsContainer.innerHTML = `
         <h3>All-Time Membership Signups</h3>
-        <div class="table-wrapper">
-            <table>
-                <thead><tr><th>Join Date</th><th>Customer Name</th><th>Phone</th></tr></thead>
-                <tbody>${membershipsTableHTML}</tbody>
-            </table>
-        </div>
+        <table>
+            <thead><tr><th>Join Date</th><th>Customer Name</th><th>Phone</th></tr></thead>
+            <tbody>${membershipsTableHTML}</tbody>
+        </table>
     `;
 }
 
@@ -1609,12 +1504,10 @@ function renderStaffFrequentCustomers(staffName) {
     container.innerHTML = `
         <h3>Frequent Customers for ${staffName}</h3>
         ${summaryHTML}
-        <div class="table-wrapper">
-            <table>
-                <thead><tr><th>Rank</th><th>Name</th><th>Phone</th><th>Visits (with this staff)</th></tr></thead>
-                <tbody>${tableHTML}</tbody>
-            </table>
-        </div>
+        <table>
+            <thead><tr><th>Rank</th><th>Name</th><th>Phone</th><th>Visits (with this staff)</th></tr></thead>
+            <tbody>${tableHTML}</tbody>
+        </table>
     `;
 }
 
@@ -1648,36 +1541,34 @@ function renderStaffTab() {
                 <label for="salary-month-${name}"><b>Select Month:</b></label>
                 <input type="month" id="salary-month-${name}" class="salary-month">
             </div>
-            <div class="table-wrapper">
-                <table class="salary-table">
-                    <thead>
-                        <tr>
-                            <th>Base Salary</th>
-                            <th>No. of OTs</th>
-                            <th>OT Incentive</th>
-                            <th class="th-with-input">% Incentive <input type="number" class="header-input percent-incentive"></th>
-                            <th>Extra Days</th>
-                            <th>Extra Day Pay</th>
-                            <th>Memberships</th>
-                            <th>Membership Incentive</th>
-                            <th>Total Salary</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><input type="number" class="base-salary" placeholder="0" value="${staffData.baseSalary || ''}"></td>
-                            <td><input type="number" class="ots" placeholder="0"></td>
-                            <td class="output-cell ot-incentive-total">₹0.00</td>
-                            <td class="output-cell percent-incentive-total">₹0.00</td>
-                            <td><input type="number" class="extra-days" placeholder="0"></td>
-                            <td class="output-cell extra-day-pay">₹0.00</td>
-                            <td class="output-cell memberships-count">0</td>
-                            <td class="output-cell membership-incentive-total">₹0.00</td>
-                            <td class="output-cell total-salary">₹0.00</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+            <table class="salary-table">
+                <thead>
+                    <tr>
+                        <th>Base Salary</th>
+                        <th>No. of OTs</th>
+                        <th>OT Incentive</th>
+                        <th class="th-with-input">% Incentive <input type="number" class="header-input percent-incentive"></th>
+                        <th>Extra Days</th>
+                        <th>Extra Day Pay</th>
+                        <th>Memberships</th>
+                        <th>Membership Incentive</th>
+                        <th>Total Salary</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><input type="number" class="base-salary" placeholder="0" value="${staffData.baseSalary || ''}"></td>
+                        <td><input type="number" class="ots" placeholder="0"></td>
+                        <td class="output-cell ot-incentive-total">₹0.00</td>
+                        <td class="output-cell percent-incentive-total">₹0.00</td>
+                        <td><input type="number" class="extra-days" placeholder="0"></td>
+                        <td class="output-cell extra-day-pay">₹0.00</td>
+                        <td class="output-cell memberships-count">0</td>
+                        <td class="output-cell membership-incentive-total">₹0.00</td>
+                        <td class="output-cell total-salary">₹0.00</td>
+                    </tr>
+                </tbody>
+            </table>
             <div class="staff-performance-details" id="staff-details-${name}">
                 <div class="staff-summary" id="staff-summary-${name}" style="margin-top: 25px;"></div>
                 <div class="sub-nav" style="margin-top: 20px;">
