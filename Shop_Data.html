@@ -402,6 +402,7 @@
 </div>
 
 <script>
+const SPREADSHEET_ID = '1GBu3qY9OTwcornH9HJLSnsG94EoGr8Z7KDtSPdT-y58';
 // --- Global Data Variables ---
 let entries = [];
 let vip = [];
@@ -415,8 +416,6 @@ let atRiskList = JSON.parse(localStorage.getItem("at_risk_list") || "{}");
 
 
 // --- Google Sheet Data Fetching ---
-const SPREADSHEET_ID = '1GBu3qY9OTwcornH9HJLSnsG94EoGr8Z7KDtSPdT-y58';
-
 function buildSheetUrl(sheetName) {
     const encodedSheetName = encodeURIComponent(sheetName);
     return `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodedSheetName}`;
@@ -444,13 +443,20 @@ function parseSheetData(csvText, mapping, options = {}) {
 
     const splitRegex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
     const rawHeaders = lines.shift().split(splitRegex);
-    const headers = rawHeaders.map(h => h.replace(/"/g, '').trim());
+    const headers = rawHeaders.map(h => h.replace(/"/g, '').replace(/\s+/g, ' ').trim());
+    const lowerCaseHeaders = headers.map(h => h.toLowerCase());
+
+    // Create a case-insensitive version of the mapping keys
+    const lowerCaseMapping = {};
+    for (const key in mapping) {
+        lowerCaseMapping[key.toLowerCase()] = mapping[key];
+    }
 
     if (isSimpleArray) {
-        const targetHeader = Object.keys(mapping)[0];
-        const targetIndex = headers.findIndex(h => h === targetHeader);
+        const targetHeaderLower = Object.keys(lowerCaseMapping)[0];
+        const targetIndex = lowerCaseHeaders.indexOf(targetHeaderLower);
         if (targetIndex === -1) {
-            console.error(`Header "${targetHeader}" not found for simple array parsing.`);
+            console.error(`Header "${Object.keys(mapping)[0]}" not found for simple array parsing. Found: [${headers.join(', ')}]`);
             return [];
         }
         return lines.map(line => {
@@ -464,20 +470,26 @@ function parseSheetData(csvText, mapping, options = {}) {
         if (!line.trim()) return null;
         const values = line.trim().split(splitRegex).map(v => v.replace(/^"|"$/g, '').trim());
         const obj = {};
-        const dynamicValues = [];
-
+        
         headers.forEach((header, index) => {
-            const mappedKey = mapping[header];
+            const lowerHeader = header.toLowerCase();
+            const mappedKey = lowerCaseMapping[lowerHeader];
+            
             if (mappedKey) {
                 obj[mappedKey] = values[index];
-            } else if (dynamicColPrefix && header.toLowerCase().startsWith(dynamicColPrefix)) {
-                if (values[index]) {
-                    dynamicValues.push(values[index]);
-                }
             }
         });
-
+        
+        // Handle dynamic columns separately
         if (dynamicColPrefix) {
+            const dynamicValues = [];
+            headers.forEach((header, index) => {
+                if (header.toLowerCase().startsWith(dynamicColPrefix)) {
+                    if (values[index]) {
+                        dynamicValues.push(values[index]);
+                    }
+                }
+            });
             obj[dynamicColPrefix + 'Text'] = dynamicValues.join(', ');
         }
         
@@ -501,10 +513,10 @@ async function loadDataFromSheet() {
             'Staff': 'staff', 'Member': 'member', 'Total': 'total', 'Paid ₹': 'paid'
         };
         const vipMapping = {
-            'Date of Joining': 'date', 'Phone Number': 'phone',
-            'Customer Name': 'name', 'Referred by': 'staff'
+            'Phone': 'phone', 'Name': 'name', 'Join Date': 'date', 
+            'Staff': 'staff', 'Expiry Date': 'expiryDate'
         };
-        const staffMapping = { 'Staff Name': 'name' };
+        const staffMapping = { 'Staff Member': 'name' };
        
         const [entriesRes, vipRes, staffRes] = await Promise.all([
             fetch(entriesUrl), fetch(vipUrl), fetch(staffUrl)
@@ -694,7 +706,9 @@ const vipBody = document.querySelector("#vip-table tbody");
 const vipSearchInput = document.getElementById("vip-search");
 const vipCountDiv = document.getElementById("vip-count");
 function renderActiveVIPs(filter = "") {
-  const activeVips = vip.filter(v => parseDate(v.date) >= oneYearAgo);
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const activeVips = vip.filter(v => v.expiryDate && parseDate(v.expiryDate) >= today);
   vipBody.innerHTML = "";
   const filtered = activeVips.filter(v => (v.name || "").toLowerCase().includes(filter.toLowerCase()) || (v.phone || "").toLowerCase().includes(filter.toLowerCase())).sort((a, b) => parseDate(b.date) - parseDate(a.date));
   vipCountDiv.innerText = `Total Active VIPs: ${filtered.length}`;
@@ -713,17 +727,17 @@ const expiredVipBody = document.querySelector("#expired-vip-table tbody");
 const expiredVipSearchInput = document.getElementById("expired-vip-search");
 const expiredVipCountDiv = document.getElementById("expired-vip-count");
 function renderExpiredVIPs(filter = "") {
-    const expiredVips = vip.filter(v => parseDate(v.date) < oneYearAgo);
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const expiredVips = vip.filter(v => !v.expiryDate || parseDate(v.expiryDate) < today);
     expiredVipBody.innerHTML = "";
     const filtered = expiredVips.filter(v => (v.name || "").toLowerCase().includes(filter.toLowerCase()) || (v.phone || "").toLowerCase().includes(filter.toLowerCase())).sort((a, b) => parseDate(b.date) - parseDate(a.date));
     expiredVipCountDiv.innerText = `Total Expired VIPs: ${filtered.length}`;
     filtered.forEach(v => {
         const tr = document.createElement("tr");
-        const expiryDate = parseDate(v.date);
-        expiryDate.setFullYear(expiryDate.getFullYear() + 1);
         tr.className = 'clickable-row';
         tr.setAttribute('onclick', `showCustomerDetailsModal('${v.phone}')`);
-        tr.innerHTML = `<td>${v.phone || ''}</td><td>${v.name || ''}</td><td>${v.date || ''}</td><td>${expiryDate.toLocaleDateString('en-GB')}</td>`;
+        tr.innerHTML = `<td>${v.phone || ''}</td><td>${v.name || ''}</td><td>${v.date || ''}</td><td>${v.expiryDate || 'N/A'}</td>`;
         expiredVipBody.appendChild(tr);
     });
 }
@@ -766,12 +780,16 @@ function showCustomerDetailsModal(phone) {
 
     if (isVip && vipRecord) {
         const joinDate = parseDate(vipRecord.date);
-        const expiryDate = new Date(joinDate);
-        expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-        const isActive = expiryDate >= today;
+        const expiryDate = vipRecord.expiryDate ? parseDate(vipRecord.expiryDate) : null;
+        const isActive = expiryDate && expiryDate >= today;
         const status = isActive ? 'Active' : 'Expired';
-        const daysRemaining = Math.floor((expiryDate - today) / (1000 * 60 * 60 * 24));
-        const expiryText = isActive ? `Expires in ${daysRemaining} days` : `Expired ${Math.abs(daysRemaining)} days ago`;
+        
+        let expiryText = 'No Expiry Date';
+        if (expiryDate) {
+            const daysRemaining = Math.floor((expiryDate - today) / (1000 * 60 * 60 * 24));
+            expiryText = isActive ? `Expires in ${daysRemaining} days` : `Expired ${Math.abs(daysRemaining)} days ago`;
+        }
+
 
         let renewal = { text: 'N/A', class: 'medium' };
         if (isActive && daysSinceLastVisit !== 'N/A') {
@@ -783,7 +801,7 @@ function showCustomerDetailsModal(phone) {
         headerHTML += `
             <p>
                 <span class="status-tag ${status.toLowerCase()}">${status}</span>
-                <span style="margin-left: 15px;"><b>Joined:</b> ${joinDate.toLocaleDateString('en-GB')} | <b>Expiry:</b> ${expiryDate.toLocaleDateString('en-GB')} (${expiryText})</span>
+                <span style="margin-left: 15px;"><b>Joined:</b> ${joinDate.toLocaleDateString('en-GB')} | <b>Expiry:</b> ${expiryDate ? expiryDate.toLocaleDateString('en-GB') : 'N/A'} (${expiryText})</span>
                 ${isActive ? `<span style="margin-left: 15px;"><b>Renewal Probability:</b> <span class="renewal-tag ${renewal.class}">${renewal.text}</span></span>` : ''}
             </p>
         `;
@@ -1469,7 +1487,7 @@ function renderStaffMonthlyDetails(staffName, selectedMonth) {
     });
 
     const vipsThisMonth = vip.filter(v => {
-        if (!v.staff || v.staff !== staffName || !e.date) return false;
+        if (!v.staff || v.staff !== staffName || !v.date) return false;
         const vipDate = parseDate(v.date);
         return vipDate >= startDate && vipDate < endDate;
     });
