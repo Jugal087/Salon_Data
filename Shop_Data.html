@@ -739,6 +739,8 @@ function renderCustomers(textFilter = "", dateFilter = "") {
   // Populate the table
   filtered.forEach(e => {
     const tr = document.createElement("tr");
+    tr.className = 'clickable-row';
+    tr.setAttribute('onclick', `showCustomerDetailsModal('${e.phone}')`);
     tr.innerHTML = `<td>${e.date}</td><td>${e.phone}</td><td>${e.name}</td><td>${e.servicesText || ""}</td><td>${e.staff || ""}</td><td>${e.member || "Normal"}</td><td>₹${e.total || 0}</td><td>₹${e.paid || 0}</td>`;
     customerBody.appendChild(tr);
   });
@@ -1845,3 +1847,4 @@ document.addEventListener('DOMContentLoaded', initializeApp);
 
 </body>
 </html>
+
