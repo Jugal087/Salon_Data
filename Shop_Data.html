@@ -195,9 +195,9 @@ input[type="text"]:focus, input[type="date"]:focus, input[type="month"]:focus, i
     border-radius: var(--radius); box-shadow: var(--shadow);
     overflow-x: auto; box-sizing: border-box;
 }
-.chart-bar-wrapper { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; text-align: center; min-width: 25px; }
+.chart-bar-wrapper { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; text-align: center; min-width: 25px; cursor: pointer; }
 .chart-bar { width: 90%; background: linear-gradient(180deg, var(--accent-hover), var(--accent)); border-radius: 6px 6px 0 0; transition: var(--transition); position: relative; }
-.chart-bar:hover { background: linear-gradient(180deg, var(--accent-active2), var(--accent-active2)); transform: scale(1.05); }
+.chart-bar-wrapper:hover .chart-bar { background: linear-gradient(180deg, var(--accent-active2), var(--accent-active2)); transform: scale(1.05); }
 .chart-label { font-size: 12px; margin-top: 8px; padding-bottom: 8px; font-weight: 500; }
 .chart-tooltip {
     position: absolute; top: -30px; left: 50%; transform: translateX(-50%); background: #333;
@@ -529,16 +529,17 @@ async function fetchDataFromSheet() {
         const vipData = data.valueRanges[1].values || [];
         const staffData = data.valueRanges[2].values || [];
 
-        // Parse data into the format the app expects
-        entries = parseEntries(entriesData);
+        // Parse VIP and Staff first to have the data ready for entry parsing
         vip = parseVip(vipData);
         staffMembers = parseStaff(staffData);
-        
         vipPhoneSet = new Set(vip.map(v => v.phone));
+        
+        // Now parse entries, which depends on vipPhoneSet
+        entries = parseEntries(entriesData);
 
     } catch (error) {
         console.error("Error fetching data from Google Sheets:", error);
-        document.getElementById('loading').innerHTML = `<p style="color:red;">Error: Could not load data. Check the console for details.</p>`;
+        document.body.innerHTML = `<p style="color:red; text-align:center; padding: 50px;">Error: Could not load data. Check the console for details.</p>`;
         throw error; // Re-throw to stop app initialization
     }
 }
@@ -574,7 +575,12 @@ function parseEntries(data) {
             }
         }
         
-        entry.member = 'Normal';
+        // Check if the customer is a VIP
+        if (vipPhoneSet.has(entry.phone)) {
+            entry.member = 'VIP';
+        } else {
+            entry.member = 'Normal';
+        }
 
         const services = [];
         if (serviceStartIndex > 0 && serviceEndIndex > serviceStartIndex) {
@@ -906,6 +912,65 @@ function showCustomerDetailsModal(phone) {
     modalOverlay.classList.remove('hidden');
 }
 
+function showDailyReportModal(day, monthStr) {
+    const dateStr = `${String(day).padStart(2, '0')}-${monthStr.slice(5,7)}-${monthStr.slice(0,4)}`;
+    const dailyEntries = entries.filter(e => e.date === dateStr);
+
+    if (dailyEntries.length === 0) {
+        console.warn("No entries found for this day:", dateStr);
+        return;
+    }
+
+    const totalRevenue = dailyEntries.reduce((sum, e) => sum + (Number(e.paid) || 0), 0);
+    const totalServices = dailyEntries.length;
+    const uniqueCustomers = new Set(dailyEntries.map(e => e.phone)).size;
+    const vipVisits = dailyEntries.filter(e => vipPhoneSet.has(e.phone)).length;
+    
+    // Aggregate services
+    const serviceCounts = dailyEntries
+        .flatMap(e => (e.servicesText || "").split(',').map(s => s.trim()).filter(Boolean))
+        .reduce((acc, service) => {
+            acc[service] = (acc[service] || 0) + 1;
+            return acc;
+        }, {});
+    const sortedServices = Object.entries(serviceCounts).sort((a,b) => b[1] - a[1]);
+
+    const modalBody = document.getElementById('modal-body');
+
+    modalBody.innerHTML = `
+        <h3>Daily Report for ${dateStr}</h3>
+        <div class="modal-summary">
+            <div class="card"><h3>₹${totalRevenue.toLocaleString('en-IN')}</h3><p>Total Revenue</p></div>
+            <div class="card"><h3>${totalServices}</h3><p>Total Services</p></div>
+            <div class="card"><h3>${uniqueCustomers}</h3><p>Unique Customers</p></div>
+            <div class="card"><h3>${vipVisits}</h3><p>VIP Visits</p></div>
+        </div>
+
+        <h4>Services Breakdown</h4>
+        <div style="max-height: 150px; overflow-y: auto;" class="table-wrapper">
+             <table>
+                <thead><tr><th>Service</th><th>Count</th></tr></thead>
+                <tbody>
+                    ${sortedServices.length > 0 ? sortedServices.map(([name, count]) => `<tr><td>${name}</td><td>${count}</td></tr>`).join("") : '<tr><td colspan="2" style="text-align:center;">No services recorded.</td></tr>'}
+                </tbody>
+            </table>
+        </div>
+
+        <h4 style="margin-top: 20px;">Transactions</h4>
+        <div style="max-height: 250px; overflow-y: auto;" class="table-wrapper">
+             <table>
+                <thead><tr><th>Name</th><th>Phone</th><th>Services</th><th>Staff</th><th>Paid ₹</th></tr></thead>
+                <tbody>
+                    ${dailyEntries.map(r => `<tr class="clickable-row" onclick="closeModal(); showCustomerDetailsModal('${r.phone}')"><td>${r.name}</td><td>${r.phone}</td><td>${r.servicesText || ""}</td><td>${r.staff || ""}</td><td>₹${r.paid || 0}</td></tr>`).join("")}
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    modalOverlay.classList.remove('hidden');
+}
+
+
 modalOverlay.addEventListener('click', (e) => {
     if (e.target === modalOverlay) {
         closeModal();
@@ -1051,7 +1116,7 @@ function renderMonthlyReport() {
         <div class="card"><h3>₹${currentMetrics.discounts.toFixed(0)}</h3><p>Discounts Given</p></div>
         <div class="card"><h3>${newVipsThisMonth.length}</h3><p>New VIPs</p></div>
       </div>
-      ${generateBarChartHTML(dailyRevenue)}
+      ${generateBarChartHTML(dailyRevenue, selectedMonth)}
       <h3>Staff Performance</h3>
       <div class="table-wrapper"><table><thead><tr><th>Staff Name</th><th>Revenue</th><th>Services</th><th>Memberships This Month</th></tr></thead><tbody>${sortedStaff.map(s => `<tr><td>${s.name}</td><td>₹${s.revenue.toFixed(0)}</td><td>${s.services}</td><td>${s.memberships}</td></tr>`).join("")}</tbody></table></div>
       <h3>Top 5 Spending Customers This Month</h3>
@@ -1292,14 +1357,14 @@ function setDefaultMonthAndRender() {
 }
 reportMonthInput.addEventListener('change', renderMonthlyReport);
 
-function generateBarChartHTML(dailyData) {
+function generateBarChartHTML(dailyData, selectedMonth) {
     let dataPoints = Object.entries(dailyData);
     if (dataPoints.length === 0) return '';
     dataPoints.sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
     const maxRevenue = Math.max(...dataPoints.map(d => d[1]));
     return `<h3>Daily Revenue Trend</h3><div class="chart-container">${dataPoints.map(([day, revenue]) => {
         const height = maxRevenue > 0 ? (revenue / maxRevenue) * 100 : 0;
-        return `<div class="chart-bar-wrapper"><div class="chart-bar" style="height: ${height}%;"><div class="chart-tooltip">₹${revenue.toFixed(0)}</div></div><div class="chart-label">${day}</div></div>`;
+        return `<div class="chart-bar-wrapper" onclick="showDailyReportModal('${day}', '${selectedMonth}')"><div class="chart-bar" style="height: ${height}%;"><div class="chart-tooltip">₹${revenue.toFixed(0)}</div></div><div class="chart-label">${day}</div></div>`;
     }).join('')}</div>`;
 }
 
@@ -1768,18 +1833,11 @@ async function initializeApp() {
         showProfileTab("all"); 
         renderStaffTab();
         
-        // Hide loading overlay
-        const loadingOverlay = document.getElementById('loading');
-        if (loadingOverlay) {
-            loadingOverlay.classList.add('hidden');
-        }
-
     } catch (error) {
         console.error("Application initialization failed.", error);
     }
 }
 
-// Add a simple loading indicator in case the script takes time to load
 
 document.addEventListener('DOMContentLoaded', initializeApp);
 
